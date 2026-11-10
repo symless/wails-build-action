@@ -120,23 +120,24 @@ runs:
       run: |
         sudo apt-get -yq update
         DISTRO=$(lsb_release -rs) # Get the distribution version (e.g., "22.04", "24.04")
-        if [[ "$DISTRO" == "20.04" ]]; then
-          sudo apt-get -yq install libgtk-3-0 libwebkit2gtk-4.0-dev gcc-aarch64-linux-gnu
-        elif [[ "$DISTRO" == "22.04" ]]; then
-          sudo apt-get -yq install libgtk-3-0 libwebkit2gtk-4.0-dev gcc-aarch64-linux-gnu
-        elif [[ "$DISTRO" == "24.04" ]]; then
-          sudo apt-get -yq install libgtk-3-0 libwebkit2gtk-4.1-dev gcc-aarch64-linux-gnu
+        # Ubuntu 24.04 dropped WebKitGTK 4.0, so it and every later release use 4.1.
+        if dpkg --compare-versions "$DISTRO" ge 24.04; then
+          WEBKIT=4.1
+        elif dpkg --compare-versions "$DISTRO" ge 20.04; then
+          WEBKIT=4.0
         else
           echo "Unsupported Linux distribution: $DISTRO"
           exit 1 # Fail the workflow if the distribution is not supported
         fi
+        sudo apt-get -yq install libgtk-3-0 libwebkit2gtk-$WEBKIT-dev gcc-aarch64-linux-gnu
         echo "DISTRO=$DISTRO" >> "$GITHUB_OUTPUT"
+        echo "WEBKIT=$WEBKIT" >> "$GITHUB_OUTPUT"
       shell: bash
     - name: Setup Build Options
       id: build_options
       shell: bash
       env:
-        DISTRO: ${{ steps.linux_discovery.outputs.DISTRO }}
+        WEBKIT: ${{ steps.linux_discovery.outputs.WEBKIT }}
       run: |
         build_options=""
         if ${{ inputs.build-obfuscate == 'true' }}; then
@@ -144,11 +145,11 @@ runs:
         fi
         if [[ "${{ inputs.build-tags }}" != "false" ]]; then
           tags_string="${{ inputs.build-tags }}"
-          if [[ "$DISTRO" == '24.04' ]]; then
+          if [[ "$WEBKIT" == '4.1' ]]; then
             tags_string+=" webkit2_41"
           fi
-          build_options+=" -tags $tags_string" 
-        elif [[ "${{ inputs.build-tags }}" == "false" && "$DISTRO" == '24.04' ]]; then 
+          build_options+=" -tags $tags_string"
+        elif [[ "${{ inputs.build-tags }}" == "false" && "$WEBKIT" == '4.1' ]]; then
           build_options+=" -tags webkit2_41"
         fi
         if ${{ inputs.nsis == 'true' }}; then
